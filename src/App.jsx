@@ -8,7 +8,7 @@ export default function App() {
 		version: 'draft',
 	});
 	if (!story?.content) {
-		return <div>Loading...</div>;
+		return <div>Loadinga...</div>;
 	}
 	return (
 		<>
