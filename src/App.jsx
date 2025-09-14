@@ -13,7 +13,7 @@ export default function App() {
 	return (
 		<>
 			<StoryblokComponent blok={story.content} />
-			<footer>All arisadgfgaghts reservedss © {currentYear}</footer>
+			<footer>Build with happiness © {currentYear}</footer>
 		</>
 	);
 }
