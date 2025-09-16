@@ -10,6 +10,7 @@ import Page from './storyblok/Page';
 import Teaser from './storyblok/Teaser';
 import Feature from './storyblok/Feature';
 import Grid from './storyblok/Grid';
+import Game from './Game/Game';
 
 storyblokInit({
 	accessToken: import.meta.env.STORYBLOK_DELIVERY_API_TOKEN,
@@ -34,6 +35,10 @@ const router = createBrowserRouter([
 		path: '/*',
 		Component: App,
 	},
+	{
+		path: '/game',
+		Component: Game,
+	}
 ]);
 const root = document.getElementById('root');
 
