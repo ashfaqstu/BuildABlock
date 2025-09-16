@@ -5,7 +5,7 @@ export default function App() {
 	const currentYear = new Date().getFullYear();
 	const { '*': slug } = useParams();
 	const story = useStoryblok(slug || 'home', {
-		version: 'draft',
+		version: import.meta.env.STORYBLOK_IS_PREVIEW === 'true' ? 'draft' : 'published'
 	});
 	if (!story?.content) {
 		return <div>Loadinga...</div>;
