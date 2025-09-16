@@ -29,6 +29,7 @@ storyblokInit({
 		teaser: Teaser,
 		feature: Feature,
 		grid: Grid,
+		game: Game,
 	},
 });
 const router = createBrowserRouter([
