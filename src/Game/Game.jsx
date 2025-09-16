@@ -12,9 +12,10 @@ export default function Game({ blok }) {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Fetch draft content if in preview mode, or published content for production
         const response = await storyblokApi.get('cdn/stories/game', {
-          version: import.meta.env.STORYBLOK_IS_PREVIEW === 'true' ? 'draft' : 'published',
-          token: import.meta.env.STORYBLOK_DELIVERY_API_TOKEN,
+          version: import.meta.env.VITE_STORYBLOK_IS_PREVIEW === 'true' ? 'draft' : 'published',
+          token: import.meta.env.VITE_STORYBLOK_TOKEN,
         });
         setContent(response.data.story.content);
         setLoading(false);
@@ -28,13 +29,13 @@ export default function Game({ blok }) {
 
   // Sync with Storyblok Visual Editor once content is available
   useEffect(() => {
-    if (content?.story?.id && import.meta.env.STORYBLOK_IS_PREVIEW === 'true') {
-      // Initialize Storyblok Bridge only if we are in preview mode
+    if (content?.story?.id && import.meta.env.VITE_STORYBLOK_IS_PREVIEW === 'true') {
+      // Initialize Storyblok Bridge for real-time editing in the preview environment
       storyblokInit({
-        bridge: true, // Enables Storyblok Bridge for real-time editing
+        bridge: true,  // Enable the Storyblok Bridge
       });
 
-      // Sync content with the visual editor once it's available
+      // Only sync with the editor once we have the content ID
       useStoryblokBridge(content.story.id);
     }
   }, [content]);
@@ -44,14 +45,14 @@ export default function Game({ blok }) {
   }
 
   // Get the image URL and description from the content
-  const imageUrl = content?.imagea?.filename || null;
+  const imageUrl = content?.image?.filename || null;
   const description = content?.description || null;
 
   // Get the editable attributes for the content block (blok)
-  const attributes = storyblokEditable(blok); // Get Storyblok editable attributes
+  const attributes = storyblokEditable(blok); // Apply Storyblok's editable attributes
 
   return (
-    <div {...attributes}> {/* Apply Storyblok's editable attributes directly to the div */}
+    <div {...attributes}> {/* Apply Storyblok's editable attributes to the div */}
       <h1>Game Page</h1>
       {description && <p>{description}</p>}
       {imageUrl && <img src={imageUrl} alt="Game Image" />}
