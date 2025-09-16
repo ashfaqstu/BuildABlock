@@ -12,7 +12,7 @@ export default function Game({ blok }) {
     const fetchData = async () => {
       try {
         const response = await storyblokApi.get('cdn/stories/game', {
-          version: 'published',
+          version: 'draft',
           token: import.meta.env.STORYBLOK_DELIVERY_API_TOKEN,
         });
         setContent(response.data.story.content);
