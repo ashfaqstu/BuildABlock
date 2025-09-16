@@ -31,9 +31,11 @@ export default function Game({ blok }) {
         return <div>Loading...</div>;
     }
     const imageUrl = content?.imagea?.filename || null;
+    const description= content.description || null;
     return (
         <div>
             <h1>hi</h1>
+            {description && <p>{description}</p>}
             {imageUrl && <img src={imageUrl} alt="Game Image" />}
         </div>
     );
