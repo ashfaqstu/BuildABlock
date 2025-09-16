@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useStoryblokApi, useStoryblokBridge, storyblokEditable } from '@storyblok/react'; 
+import { useStoryblokApi, storyblokEditable } from '@storyblok/react'; 
+import { storyblokInit, useStoryblokBridge } from '@storyblok/js';
 
 export default function Game({ blok }) {
   const [content, setContent] = useState(null);
@@ -27,8 +28,13 @@ export default function Game({ blok }) {
 
   // Sync with Storyblok Visual Editor once content is available
   useEffect(() => {
-    if (content?.story?.id) {
-      // Only sync once we have the content id
+    if (content?.story?.id && import.meta.env.STORYBLOK_IS_PREVIEW === 'true') {
+      // Initialize Storyblok Bridge only if we are in preview mode
+      storyblokInit({
+        bridge: true, // Enables Storyblok Bridge for real-time editing
+      });
+
+      // Sync content with the visual editor once it's available
       useStoryblokBridge(content.story.id);
     }
   }, [content]);
@@ -45,7 +51,7 @@ export default function Game({ blok }) {
   const attributes = storyblokEditable(blok); // Get Storyblok editable attributes
 
   return (
-    <div {...attributes}> {/* Apply Storyblok's editable attributes to the div */}
+    <div {...attributes}> {/* Apply Storyblok's editable attributes directly to the div */}
       <h1>Game Page</h1>
       {description && <p>{description}</p>}
       {imageUrl && <img src={imageUrl} alt="Game Image" />}
