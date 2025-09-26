@@ -28,31 +28,17 @@ export default function Game({ blok }) {
   }, [storyblokApi]);
 
   // Sync with Storyblok Visual Editor once content is available
-  useEffect(() => {
-    if (content?.story?.id && import.meta.env.VITE_STORYBLOK_IS_PREVIEW === 'true') {
-      // Initialize Storyblok Bridge for real-time editing in the preview environment
-      storyblokInit({
-        bridge: true,  // Enable the Storyblok Bridge
-      });
-
-      // Only sync with the editor once we have the content ID
-      useStoryblokBridge(content.story.id);
-    }
-  }, [content]);
-
   if (loading) {
     return <div>Loading...</div>;
   }
 
   // Get the image URL and description from the content
-  const imageUrl = content?.image?.filename || null;
+  const imageUrl = content?.imagea?.filename || null;
   const description = content?.description || null;
 
-  // Get the editable attributes for the content block (blok)
-  const attributes = storyblokEditable(blok); // Apply Storyblok's editable attributes
 
   return (
-    <div {...attributes}> {/* Apply Storyblok's editable attributes to the div */}
+    <div>
       <h1>Game Page</h1>
       {description && <p>{description}</p>}
       {imageUrl && <img src={imageUrl} alt="Game Image" />}

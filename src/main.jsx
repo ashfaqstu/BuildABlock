@@ -34,11 +34,11 @@ storyblokInit({
 });
 const router = createBrowserRouter([
 	{
-		path: '/*',
+		path: '/dkdkf',
 		Component: App,
 	},
 	{
-		path: '/game',
+		path: '/*',
 		Component: Game,
 	},
 	
