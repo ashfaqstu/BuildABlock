@@ -13,8 +13,8 @@ export default function Game({ blok }) {
     const fetchData = async () => {
       try {
         // Fetch draft content if in preview mode, or published content for production
-        const response = await storyblokApi.get('cdn/stories/game', {
-          version: import.meta.env.VITE_STORYBLOK_IS_PREVIEW === 'true' ? 'draft' : 'published',
+        const response = await storyblokApi.get('cdn/stories/blok', {
+          version: 'published',
           token: import.meta.env.VITE_STORYBLOK_TOKEN,
         });
         setContent(response.data.story.content);
@@ -35,7 +35,7 @@ export default function Game({ blok }) {
   // Get the image URL and description from the content
   const imageUrl = content?.imagea?.filename || null;
   const description = content?.description || null;
-
+    
 
   return (
     <div>
