@@ -13,6 +13,7 @@ import Feature from "./storyblok/Feature";
 import Home from "./Game/Home"; // Storyblok 'home' component
 import Grid from "./storyblok/Grid";
 
+
 // Pages
 import Game from "./Game/Game";         // Storyblok 'game' component
 import Platformer from "./Game/Blok.jsx"; // Your actual playable page at /game
@@ -32,7 +33,7 @@ storyblokInit({
     teaser: Teaser,
     feature: Feature,
     grid: Grid,
-    game: Game,
+    game: Platformer,
     home: Home,
   },
 });
