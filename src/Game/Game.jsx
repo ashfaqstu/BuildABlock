@@ -1,48 +1,145 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useStoryblokApi } from "@storyblok/react";
-import DotGrid from "../components/DotGrid";
 import { useNavigate } from "react-router-dom";
+import DotGrid from "../components/DotGrid";
 
-// ---------- Defaults (used as fallback) ----------
-const DEFAULT_PRIMARY = "#58B883";
-const DEFAULT_THEME = (primary = DEFAULT_PRIMARY) => ({
-  bg: "#F3EAD7",
-  grid: "#E9E2CF",
-  text: "#1F1E1A",
-  cardBg: "rgba(255, 247, 228, 0.85)",
-  cardBorder: "rgba(31, 30, 26, 0.25)",
-  cardShadow: "0 6px 20px rgba(0,0,0,0.18)",
-  btnBg: "rgba(255, 243, 221, 0.9)",
-  btnBorder: "rgba(31, 30, 26, 0.25)",
-  btnShadow: "0 4px 12px rgba(0,0,0,0.15)",
-  tileSolid: "#2B2A26",
-  tileEnemy: "#D74B4B",
-  tileGoal:  primary,          // <- primary used here
-  player: "#2D2C28",
-  coin: "#E6C35C",
-});
+/* ===================== Color Utilities ===================== */
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
 
-// ---------- Small utils ----------
-const isHexColor = (c) => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test((c||"").trim());
-const pickPrimaryFromContent = (content) => {
-  const maybe =
-    content?.primary_color ||
-    content?.theme?.primary ||
-    content?.colors?.primary ||
-    null;
-  return isHexColor(maybe) ? maybe.trim() : DEFAULT_PRIMARY;
+function normalizeHex(h) {
+  if (!h) return null;
+  let s = String(h).trim();
+  if (s.startsWith("#")) s = s.slice(1);
+  if (/^[0-9a-fA-F]{6}$/.test(s)) return `#${s.toLowerCase()}`;
+  if (/^[0-9a-fA-F]{3}$/.test(s)) {
+    const r = s[0], g = s[1], b = s[2];
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  return null;
+}
+function hexToRgb(hex) {
+  const h = normalizeHex(hex);
+  if (!h) return { r: 255, g: 255, b: 255 };
+  const n = parseInt(h.slice(1), 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h, s, l = (max+min)/2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max-min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      default: h = (r - g) / d + 4;
+    }
+    h /= 6;
+  }
+  return { h, s, l };
+}
+function hslToRgb(h, s, l) {
+  const hue2rgb = (p, q, t) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+  return { r: Math.round(r*255), g: Math.round(g*255), b: Math.round(b*255) };
+}
+function rgbToHex(r, g, b) {
+  const to2 = (n) => n.toString(16).padStart(2, "0");
+  return `#${to2(r)}${to2(g)}${to2(b)}`;
+}
+function hslToHex(h, s, l) {
+  const { r, g, b } = hslToRgb(h, s, l);
+  return rgbToHex(r, g, b);
+}
+function shade(hex, dL = 0, dS = 0) {
+  const { r, g, b } = hexToRgb(hex);
+  let { h, s, l } = rgbToHsl(r, g, b);
+  s = clamp01(s + dS);
+  l = clamp01(l + dL);
+  return hslToHex(h, s, l);
+}
+
+function deriveThemeFromPrimary(primaryHex) {
+  const fallback = "#7d3cff";
+  const p = normalizeHex(primaryHex) || fallback;
+  const { r, g, b } = hexToRgb(p);
+  const { h, s } = rgbToHsl(r, g, b);
+
+  const bg = hslToHex(h, Math.max(0.40, Math.min(0.65, s * 0.9 + 0.2)), 0.82);
+  const grid = shade(bg, -0.10, 0);
+  const text = "#161513";
+  const tileSolid = "#2B2A26";
+  const coin = "#F1C65C";
+  const dotBase = "#2B2A26";
+  const dotActive = "#F1C65C";
+
+  return {
+    primary: p,
+    bg,
+    grid,
+    text,
+    cardBg: "rgba(255, 243, 214, 0.97)",
+    cardBorder: "rgba(31, 30, 26, 0.3)",
+    cardShadow: "0 8px 22px rgba(0,0,0,0.22)",
+    btnBg: "rgba(255, 239, 204, 0.98)",
+    btnBorder: "rgba(31, 30, 26, 0.32)",
+    btnShadow: "0 5px 16px rgba(0,0,0,0.2)",
+    tileSolid,
+    tileEnemy: "#E14848", // fixed
+    tileGoal:  "#58B883", // fixed
+    player:    "#2D2C28", // fixed
+    coin,
+    dotBase,
+    dotActive,
+  };
+}
+const rgbaFromHex = (hex, a = 1) => {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${a})`;
 };
 
-const loadImage = (url) => new Promise((resolve) => {
-  if (!url || typeof url !== "string" || !/^https?:\/\//i.test(url)) return resolve(null);
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.onload = () => resolve(img);
-  img.onerror = () => resolve(null);
-  img.src = url;
-});
+/* ===================== Asset Helper ===================== */
+function loadImage(url) {
+  return new Promise((resolve) => {
+    if (!url) return resolve(null);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
 
-// ---------- Component ----------
+/* Rounded rect helper */
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x,     y + h, rr);
+  ctx.arcTo(x,     y + h, x,     y,     rr);
+  ctx.arcTo(x,     y,     x + w, y,     rr);
+  ctx.closePath();
+}
+
+/* ===================== Component ===================== */
 export default function Game() {
   const navigate = useNavigate();
   const storyblokApi = useStoryblokApi();
@@ -51,38 +148,43 @@ export default function Game() {
   const COIN_FPS = 12;
   const DEFAULT_COLS = 13;
   const DEFAULT_ROWS = 9;
-
   const makeGrid = (rows, cols, fill = 0) =>
     Array.from({ length: rows }, () => Array(cols).fill(fill));
 
   // ---- API-driven state ----
-  const levelsRef = useRef([]); // [{title, map, coin, tileImg}]
-  const levelRef = useRef(makeGrid(DEFAULT_ROWS, DEFAULT_COLS, 0));   // 0 empty, 1 solid, 2 enemy, 3 goal
-  const coinMapRef = useRef(makeGrid(DEFAULT_ROWS, DEFAULT_COLS, 0)); // 0 none, 1 coin
-  const currentTileImgRef = useRef(null);
-
+  const levelsRef = useRef([]); // [{title, map, coin, tileImg, levelPrimary, spawn}]
+  const levelRef = useRef(makeGrid(DEFAULT_ROWS, DEFAULT_COLS, 0));
+  const coinMapRef = useRef(makeGrid(DEFAULT_ROWS, DEFAULT_COLS, 0));
   const [levelTitle, setLevelTitle] = useState("Level");
   const [currentLevel, setCurrentLevel] = useState(0);
   const [coinFrames, setCoinFrames] = useState([]);
   const [coinReady, setCoinReady] = useState(false);
   const [mapsReady, setMapsReady] = useState(false);
 
-  // theme (with primary from API, fallback)
-  const [theme, setTheme] = useState(DEFAULT_THEME());
+  // theme
+  const [theme, setTheme] = useState(deriveThemeFromPrimary("#7d3cff"));
+  const currentTileImgRef = useRef(null);
+
+  // spawn for current level
+  const spawnRef = useRef({ r: 6, c: 1 });
+
+  // overlays / phase
+  const [phase, setPhase] = useState("play"); // "play" | "passed" | "won"
+  const passTimerRef = useRef(0);
 
   // ---- audio ----
-  const jumpSfxRef   = useRef(null);
-  const passedSfxRef = useRef(null);
-  const overSfxRef   = useRef(null);
-  const scorePoolRef = useRef([]);     // overlapping coin pickup sfx pool
-  const scoreIdxRef  = useRef(0);
+  const jumpSfxRef = useRef(null);
+  const hitSfxRef  = useRef(null);
+  const passSfxRef = useRef(null);
+  const scorePoolRef = useRef([]);
+  const scoreIdxRef = useRef(0);
 
   useEffect(() => {
     const POOL_SIZE = 4;
     scorePoolRef.current = Array.from({ length: POOL_SIZE }, () => {
       const a = new Audio("/assets/sfx/score.mp3");
       a.preload = "auto";
-      a.volume = 0.6;
+      a.volume = 0.65;
       return a;
     });
     return () => {
@@ -90,7 +192,6 @@ export default function Game() {
       scorePoolRef.current = [];
     };
   }, []);
-
   const playScoreSfx = () => {
     const pool = scorePoolRef.current;
     if (!pool.length) return;
@@ -98,7 +199,7 @@ export default function Game() {
     try { a.currentTime = 0; a.play(); } catch {}
   };
 
-  // ---- helpers ----
+  // ---- parsers ----
   function parseGridSmart(s, fallbackRows = DEFAULT_ROWS, fallbackCols = DEFAULT_COLS) {
     if (!s || typeof s !== "string") return makeGrid(fallbackRows, fallbackCols, 0);
     const body = s.replace(/\r\n/g, "\n").trim().replace(/,\s*$/m, "");
@@ -122,6 +223,35 @@ export default function Game() {
     }
   }
 
+  function parseGridWithSpawn(s, fallbackRows = DEFAULT_ROWS, fallbackCols = DEFAULT_COLS) {
+    if (!s || typeof s !== "string") {
+      return { grid: makeGrid(fallbackRows, fallbackCols, 0), spawn: null };
+    }
+    const body = s.replace(/\r\n/g, "\n").trim().replace(/,\s*$/m, "");
+    const rows = [];
+    let spawn = null;
+    body.split("\n").forEach((line) => {
+      let ln = line.trim();
+      if (!ln) return;
+      if (ln.endsWith(",")) ln = ln.slice(0, -1);
+      ln = ln.replace(/^\[/, "").replace(/\]$/, "");
+      const tokens = ln.split(",").map(t => t.trim()).filter(Boolean);
+      const row = tokens.map((tok, idx) => {
+        if (tok === "*" || tok === '"*"' || tok === "'*'") {
+          if (!spawn) spawn = { r: rows.length, c: idx };
+          return 0;
+        }
+        const n = parseInt(tok, 10);
+        return Number.isFinite(n) ? n : 0;
+      });
+      rows.push(row);
+    });
+    if (!rows.length) return { grid: makeGrid(fallbackRows, fallbackCols, 0), spawn: null };
+    const cols = Math.max(...rows.map(r => r.length));
+    const grid = rows.map(r => (r.length === cols ? r : r.concat(Array(cols - r.length).fill(0))));
+    return { grid, spawn };
+  }
+
   const coinsRef = useRef([]);
   const rebuildCoinsFromMap = () => {
     const arr = [];
@@ -129,83 +259,223 @@ export default function Game() {
     const cols = coinMapRef.current[0]?.length || 0;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        if ((coinMapRef.current[r]?.[c] ?? 0) == 1) arr.push({ c, r, taken: false });
+        if ((coinMapRef.current[r]?.[c] ?? 0) === 1) arr.push({ c, r, taken: false });
       }
     }
     coinsRef.current = arr;
   };
 
+  const COLS = () => (levelRef.current[0]?.length || DEFAULT_COLS);
+  const ROWS = () => (levelRef.current.length || DEFAULT_ROWS);
+
+  const player = useRef({
+    x: 1 * 64 + 64 * 0.1,
+    y: 6 * 64,
+    w: 64 * 0.6,
+    h: 64 * 0.6,
+    vx: 0, vy: 0,
+    speed: 280, jump: 800,
+    onGround: false,
+    color: "#2D2C28",
+  });
+
   const keys = useRef({ left: false, right: false, up: false });
   const clearInputsAndFocus = () => {
-    keys.current.left = keys.current.right = keys.current.up = false;
-    const el = document.activeElement;
-    if (el && typeof el.blur === "function") el.blur();
-  };
-
-  const loadLevelIndex = (idx) => {
-    const L = levelsRef.current[idx];
-    if (!L) return;
-    levelRef.current = L.map;
-    coinMapRef.current = L.coin;
-    currentTileImgRef.current = L.tileImg || null;
-    setLevelTitle(L.title || `Level ${idx + 1}`);
-    rebuildCoinsFromMap();
-    const TILE = tileRef.current;
-    Object.assign(player.current, { x: 1 * TILE + TILE * 0.1, y: 6 * TILE, vx: 0, vy: 0, onGround: false });
-    setMapsReady(true);
-    setCurrentLevel(idx);
-    recomputeSize();
-    shadowTrailRef.current = [];
-    clearInputsAndFocus();
-  };
-
-  const advanceLevel = () => {
-    const next = currentLevel + 1;
-    if (next < levelsRef.current.length) {
-      loadLevelIndex(next);
+    keys.current = { left: false, right: false, up: false };
+    if (document && document.activeElement) {
+      try { document.activeElement.blur(); } catch {}
     }
   };
 
-  // ---- fetch Storyblok + theme primary + per-level tiles ----
+  const tileRef = useRef(64);
+  const [canvasSize, setCanvasSize] = useState({ w: DEFAULT_COLS * tileRef.current, h: DEFAULT_ROWS * tileRef.current });
+  const canvasRef = useRef(null);
+
+  const [running, setRunning] = useState(true);
+  const [score, setScore] = useState(0);
+  const scoreRef = useRef(0);
+  useEffect(() => { scoreRef.current = score; }, [score]);
+
+  // screen shake
+  const shakeMsRef = useRef(0);
+
+  // ----- Delay Shadow (ghost trail) -----
+  const SHADOW_STEPS = 10;
+  const SHADOW_ALPHA = 0.14;
+  const shadowTrailRef = useRef([]);
+
+  // ===== NEW: Walking enemies (tile 7) =====
+  const walkersRef = useRef([]); // {x,y,w,h,dir,speed,ox,oy}
+
+  function buildWalkersAndCleanMap(rawMap) {
+    const TILE = tileRef.current;
+    const map = rawMap.map(row => row.slice());
+    const walkers = [];
+
+    for (let r = 0; r < map.length; r++) {
+      for (let c = 0; c < map[r].length; c++) {
+        if (map[r][c] === 7) {
+          // turn this tile into empty
+          map[r][c] = 0;
+
+          const w = TILE * 0.7;
+          const h = TILE * 0.6;
+          const x = c * TILE + (TILE - w) / 2;
+
+          // Find the top of the nearest ground beneath
+          let rr = r;
+          while (rr + 1 < map.length && map[rr + 1][c] !== 1) rr++;
+          // If there is ground below, align on top, else just use current row bottom
+          const hasGround = rr + 1 < map.length && map[rr + 1][c] === 1;
+          const y = (hasGround ? (rr + 1) : (r + 1)) * TILE - h;
+
+          walkers.push({
+            x, y, w, h,
+            dir: Math.random() < 0.5 ? -1 : 1,
+            speed: 100, // px/s
+            ox: x, oy: y
+          });
+        }
+      }
+    }
+    return { cleaned: map, walkers };
+  }
+
+  // ---------- Fancy Draws ----------
+  const drawEnemyStar = (ctx, x, y, TILE, t) => {
+    const cx = x + TILE/2, cy = y + TILE/2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((t * 0.004) % (Math.PI * 2));
+    const g = ctx.createRadialGradient(0,0,0, 0,0,TILE*0.5);
+    g.addColorStop(0, "rgba(255, 120, 120, 0.65)");
+    g.addColorStop(1, "rgba(255, 0, 0, 0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0,0,TILE*0.48,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.beginPath();
+    const spikes = 6;
+    const R1 = TILE * 0.40;
+    const R2 = TILE * 0.18;
+    for (let i=0;i<spikes*2;i++){
+      const ang = (i*Math.PI)/spikes;
+      const rr = (i%2===0) ? R1 : R2;
+      const px = Math.cos(ang)*rr, py = Math.sin(ang)*rr;
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "#E14848";
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, TILE*0.04);
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const drawFancyGoal = (ctx, x, y, TILE, t) => {
+    const cx = x + TILE / 2;
+    const cy = y + TILE / 2;
+    const r = TILE * 0.42;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 0.004);
+    const outer = r * (0.9 + 0.08 * pulse);
+    const inner = r * (0.55 + 0.05 * pulse);
+
+    const g = ctx.createRadialGradient(cx, cy, inner * 0.6, cx, cy, outer);
+    g.addColorStop(0, "rgba(255,255,255,0.65)");
+    g.addColorStop(0.5, "rgba(152, 235, 190, 0.45)");
+    g.addColorStop(1, "rgba(88, 184, 131, 0.15)");
+    ctx.save();
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, outer, 0, Math.PI * 2);
+    ctx.fill();
+
+    const g2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, inner);
+    g2.addColorStop(0, "rgba(255,255,255,0.85)");
+    g2.addColorStop(1, "rgba(88, 184, 131, 0.85)");
+    ctx.fillStyle = g2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.translate(cx, cy);
+    ctx.rotate((t * 0.002) % (Math.PI * 2));
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = Math.max(1, TILE * 0.03);
+    const spikes = 8;
+    const R1 = inner * (0.55 + 0.1 * pulse);
+    const R2 = inner * (0.9 + 0.05 * pulse);
+    ctx.beginPath();
+    for (let i = 0; i < spikes * 2; i++) {
+      const ang = (i * Math.PI) / spikes;
+      const rr = i % 2 === 0 ? R2 : R1;
+      const px = Math.cos(ang) * rr;
+      const py = Math.sin(ang) * rr;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = rgbaFromHex("#0d0c0b", 0.95);
+    ctx.font = `${Math.max(14, Math.floor(TILE * 0.34))}px system-ui, Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    const bob = Math.sin(t * 0.004) * (TILE * 0.05);
+    ctx.fillText("GOAL!", cx, y - 6 + bob);
+    ctx.restore();
+  };
+
+  const drawDottedBlock = (ctx, x, y, TILE, t, color) => {
+    ctx.save();
+    ctx.lineWidth = Math.max(1.25, TILE * 0.08);
+    ctx.setLineDash([Math.max(3, TILE * 0.18), Math.max(3, TILE * 0.18)]);
+    ctx.lineDashOffset = (t * 0.06) % (TILE * 0.36);
+    ctx.strokeStyle = color;
+    const inset = ctx.lineWidth / 2;
+    ctx.strokeRect(x + inset, y + inset, TILE - inset * 2, TILE - inset * 2);
+    ctx.restore();
+  };
+
+  // ---- Storyblok fetch ----
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res = await storyblokApi.get("cdn/stories/game", { version: "published" });
         const content = res?.data?.story?.content || {};
-
-        // primary color -> theme
-        const primary = pickPrimaryFromContent(content);
-        if (!cancelled) setTheme(DEFAULT_THEME(primary));
-
-        // levels
         const levelBlocks = Array.isArray(content?.level) ? content.level : [];
 
-        // prepare levels with possible tile image
-        const built = await Promise.all(
-          levelBlocks.map(async (blk, i) => {
-            const title = blk?.Title || `Level ${i + 1}`;
-            const map = parseGridSmart(blk?.map);
-            const coin = parseGridSmart(blk?.coin_map);
-            let tileImg = null;
-            const tileURL = blk?.tiles?.filename || "";
-            if (tileURL) tileImg = await loadImage(tileURL);
-            return { title, map, coin, tileImg };
-          })
-        );
+        const built = [];
+        for (let i = 0; i < levelBlocks.length; i++) {
+          const blk = levelBlocks[i];
+          const title = blk?.Title || `Level ${i + 1}`;
+          const { grid: parsedMap, spawn } = parseGridWithSpawn(blk?.map);
+          const coin = parseGridSmart(blk?.coin_map);
+          const levelPrimary = normalizeHex(blk?.theme) || null;
+          const tileURL = blk?.tiles?.filename || "";
+          const tileImg = await loadImage(tileURL);
+          built.push({ title, map: parsedMap, coin, tileImg, levelPrimary, spawn });
+        }
 
-        const valid = built.filter(L => L.map?.length && L.map[0]?.length);
-        if (!valid.length) {
-          valid.push({
+        if (!built.length) {
+          built.push({
             title: "Level 1",
             map: makeGrid(DEFAULT_ROWS, DEFAULT_COLS, 0),
             coin: makeGrid(DEFAULT_ROWS, DEFAULT_COLS, 0),
             tileImg: null,
+            levelPrimary: null,
+            spawn: { r: 6, c: 1 }
           });
         }
 
-        levelsRef.current = valid;
-        if (!cancelled) loadLevelIndex(0);
+        if (cancelled) return;
+        levelsRef.current = built;
+        loadLevelIndex(0);
 
         // coin frames
         const frames = (content?.assets?.[0]?.frames ?? []).map(f => f.filename);
@@ -216,8 +486,7 @@ export default function Game() {
         });
         if (sorted.length) {
           const imgs = await Promise.all(sorted.map(url => loadImage(url)));
-          const ready = imgs.filter(Boolean);
-          if (!cancelled) { setCoinFrames(ready); setCoinReady(ready.length > 0); }
+          if (!cancelled) { setCoinFrames(imgs.filter(Boolean)); setCoinReady(true); }
         } else if (!cancelled) {
           setCoinFrames([]); setCoinReady(false);
         }
@@ -228,67 +497,17 @@ export default function Game() {
           map: makeGrid(DEFAULT_ROWS, DEFAULT_COLS, 0),
           coin: makeGrid(DEFAULT_ROWS, DEFAULT_COLS, 0),
           tileImg: null,
+          levelPrimary: null,
+          spawn: { r: 6, c: 1 }
         }];
         loadLevelIndex(0);
       }
     })();
-    return () => { cancelled = true; };
-  }, [storyblokApi]); // eslint-disable-line
+    return () => { cancelled = true; clearTimeout(passTimerRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyblokApi]);
 
-  // ---- game state ----
-  const canvasRef = useRef(null);
-  const gameWrapRef = useRef(null);
-  const rafRef = useRef(0);
-  const [running, setRunning] = useState(true);
-  const [score, setScore] = useState(0);
-  const scoreRef = useRef(0);
-  useEffect(() => { scoreRef.current = score; }, [score]);
-
-  const tileRef = useRef(64);
-  const [canvasSize, setCanvasSize] = useState({ w: DEFAULT_COLS * tileRef.current, h: DEFAULT_ROWS * tileRef.current });
-
-  const COLS = () => (levelRef.current[0]?.length || DEFAULT_COLS);
-  const ROWS = () => (levelRef.current.length || DEFAULT_ROWS);
-
-  const player = useRef({
-    x: 1 * tileRef.current + tileRef.current * 0.1,
-    y: 6 * tileRef.current,
-    w: tileRef.current * 0.6,
-    h: tileRef.current * 0.6,
-    vx: 0, vy: 0,
-    speed: 280, jump: 800,
-    onGround: false,
-    color: "#2D2C28",
-  });
-
-  // ----- Delay Shadow (ghost trail) -----
-  const SHADOW_STEPS = 10;
-  const SHADOW_ALPHA = 0.14;
-  const shadowTrailRef = useRef([]); // [{x,y,w,h}...]
-
-  // ----- Overlays -----
-  // overlay = null | { kind: 'levelComplete' } | { kind: 'gameWin' }
-  const [overlay, setOverlay] = useState(null);
-  const overlayRef = useRef({ active: false, kind: null });
-  const nextLevelTimerRef = useRef(null);
-
-  // ----- Screen shake -----
-  const shakeRef = useRef({ t: 0, dur: 0, mag: 0 });
-  const startShake = (durMs = 350, mag = 12) => {
-    shakeRef.current = { t: durMs, dur: durMs, mag };
-  };
-
-  // ----- Death debounce -----
-  const deathTimerRef = useRef(null);
-
-  useEffect(() => {
-    return () => {
-      if (nextLevelTimerRef.current) clearTimeout(nextLevelTimerRef.current);
-      if (deathTimerRef.current) clearTimeout(deathTimerRef.current);
-    };
-  }, []);
-
-  const recomputeSize = () => {
+  function recomputeSize() {
     const vw = window.innerWidth, vh = window.innerHeight;
     const cols = COLS(), rows = ROWS();
     const newTile = Math.max(20, Math.floor(Math.min((vw - 24) / cols, (vh - 24) / rows)));
@@ -300,7 +519,7 @@ export default function Game() {
       tileRef.current = newTile;
     }
     setCanvasSize({ w: cols * tileRef.current, h: rows * tileRef.current });
-  };
+  }
 
   useEffect(() => {
     if (!mapsReady) return;
@@ -310,18 +529,18 @@ export default function Game() {
     return () => window.removeEventListener("resize", onResize);
   }, [mapsReady]);
 
-  const tileAt = (px, py) => {
+  function tileAt(px, py) {
     const TILE = tileRef.current;
     const col = Math.floor(px / TILE);
     const row = Math.floor(py / TILE);
-    if (col < 0 || col >= COLS() || row < 0 || row >= ROWS()) return 1; // OOB = solid
+    if (col < 0 || col >= COLS() || row < 0 || row >= ROWS()) return 1;
     return levelRef.current[row][col];
-  };
-  const isSolid = (v) => v == 1;
-  const isEnemy = (v) => v == 2;
-  const isGoal  = (v) => v == 3;
+  }
+  const isSolid = (v) => v === 1;
+  const isEnemy = (v) => v === 2 || v === 4 || v === 7;
+  const isGoal  = (v) => v === 3 || v === 6;
 
-  const rectVsWorld = (r) => {
+  function rectVsWorld(r) {
     const TILE = tileRef.current;
     let { x, y, w, h, vx, vy } = r;
 
@@ -352,132 +571,69 @@ export default function Game() {
       }
     }
     return { x, y, vx, vy, onGround };
-  };
+  }
 
-  const resetPlayer = () => {
+  function resetPlayer() {
     const TILE = tileRef.current;
-    Object.assign(player.current, { x: 1 * TILE + TILE * 0.1, y: 6 * TILE, vx: 0, vy: 0, onGround: false });
+    const s = spawnRef.current || { r: 6, c: 1 };
+    Object.assign(player.current, { x: s.c * TILE + TILE * 0.1, y: s.r * TILE, vx: 0, vy: 0, onGround: false });
     rebuildCoinsFromMap();
     shadowTrailRef.current = [];
     setScore(0);
-  };
+  }
 
   const overlaps = (ax, ay, aw, ah, bx, by, bw, bh) =>
     ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 
-  // ---- Fancy goal tile drawing + label ----
-  const drawFancyGoal = (ctx, x, y, TILE, t) => {
-    const cx = x + TILE / 2;
-    const cy = y + TILE / 2;
-    const r = TILE * 0.42;
-    const pulse = 0.5 + 0.5 * Math.sin(t * 0.004);
-    const outer = r * (0.9 + 0.08 * pulse);
-    const inner = r * (0.55 + 0.05 * pulse);
+  function loadLevelIndex(idx) {
+    clearTimeout(passTimerRef.current);
+    const L = levelsRef.current[idx];
+    if (!L) return;
 
-    // Glow ring
-    const g = ctx.createRadialGradient(cx, cy, inner * 0.6, cx, cy, outer);
-    g.addColorStop(0, "rgba(255,255,255,0.65)");
-    g.addColorStop(0.5, "rgba(152, 235, 190, 0.45)");
-    g.addColorStop(1, "rgba(88, 184, 131, 0.15)");
-    ctx.save();
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(cx, cy, outer, 0, Math.PI * 2);
-    ctx.fill();
+    // Build walkers and clean map (remove 7 markers)
+    const { cleaned, walkers } = buildWalkersAndCleanMap(L.map);
 
-    // Portal disc (use theme.tileGoal tone)
-    const g2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, inner);
-    g2.addColorStop(0, "rgba(255,255,255,0.85)");
-    g2.addColorStop(1, "rgba(88, 184, 131, 0.85)");
-    ctx.fillStyle = g2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, inner, 0, Math.PI * 2);
-    ctx.fill();
+    levelRef.current = cleaned;
+    coinMapRef.current = L.coin;
+    currentTileImgRef.current = L.tileImg || null;
+    walkersRef.current = walkers;
 
-    // Rotating starburst
-    ctx.translate(cx, cy);
-    ctx.rotate((t * 0.002) % (Math.PI * 2));
-    ctx.strokeStyle = "rgba(255,255,255,0.9)";
-    ctx.lineWidth = Math.max(1, TILE * 0.03);
-    const spikes = 8;
-    const R1 = inner * (0.55 + 0.1 * pulse);
-    const R2 = inner * (0.9 + 0.05 * pulse);
-    ctx.beginPath();
-    for (let i = 0; i < spikes * 2; i++) {
-      const ang = (i * Math.PI) / spikes;
-      const rr = i % 2 === 0 ? R2 : R1;
-      const px = Math.cos(ang) * rr;
-      const py = Math.sin(ang) * rr;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
+    setTheme(deriveThemeFromPrimary(L.levelPrimary || theme.primary));
+    setLevelTitle(L.title || `Level ${idx + 1}`);
+    rebuildCoinsFromMap();
+
+    spawnRef.current = L.spawn || { r: 6, c: 1 };
+
+    const TILE = tileRef.current;
+    Object.assign(player.current, {
+      x: spawnRef.current.c * TILE + TILE * 0.1,
+      y: spawnRef.current.r * TILE,
+      vx: 0, vy: 0,
+      onGround: false,
+      color: theme.player
+    });
+
+    setMapsReady(true);
+    setCurrentLevel(idx);
+    setPhase("play");
+    recomputeSize();
+    shadowTrailRef.current = [];
+    clearInputsAndFocus();
+  }
+
+  function advanceLevel() {
+    clearTimeout(passTimerRef.current);
+    const next = currentLevel + 1;
+    if (next < levelsRef.current.length) {
+      loadLevelIndex(next);
+    } else {
+      setPhase("won");
+      clearInputsAndFocus();
     }
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
-
-    // "GOAL!" label above
-    ctx.save();
-    ctx.font = `${Math.max(12, TILE * 0.28)}px system-ui, Arial, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    ctx.lineWidth = Math.max(2, TILE * 0.05);
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.strokeText("GOAL!", cx, y - TILE * 0.08);
-    ctx.fillText("GOAL!", cx, y - TILE * 0.08);
-    ctx.restore();
-  };
-
-  // ---- Rotating red enemy star ----
-  const drawEnemyStar = (ctx, x, y, TILE, t) => {
-    const cx = x + TILE / 2;
-    const cy = y + TILE / 2;
-    const spikes = 8;
-    const outerR = TILE * 0.45;
-    const innerR = TILE * 0.20;
-    const rot = (t * 0.003) % (Math.PI * 2);
-
-    ctx.save();
-    // soft outer glow
-    const glow = ctx.createRadialGradient(cx, cy, innerR * 0.3, cx, cy, outerR * 1.2);
-    glow.addColorStop(0, "rgba(255, 120, 120, 0.55)");
-    glow.addColorStop(1, "rgba(255, 80, 80, 0.05)");
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(cx, cy, outerR * 1.2, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.translate(cx, cy);
-    ctx.rotate(rot);
-
-    // star shape
-    ctx.beginPath();
-    for (let i = 0; i < spikes * 2; i++) {
-      const r = i % 2 === 0 ? outerR : innerR;
-      const a = (i * Math.PI) / spikes;
-      const px = Math.cos(a) * r;
-      const py = Math.sin(a) * r;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-
-    // glossy red fill
-    const grad = ctx.createLinearGradient(0, -outerR, 0, outerR);
-    grad.addColorStop(0, "#FF7A7A");
-    grad.addColorStop(0.5, "#D74B4B");
-    grad.addColorStop(1, "#A52020");
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    // bright rim
-    ctx.lineWidth = Math.max(1.5, TILE * 0.06);
-    ctx.strokeStyle = "rgba(255,255,255,0.8)";
-    ctx.stroke();
-    ctx.restore();
-  };
+  }
 
   // ---- main loop ----
+  const rafRef = useRef(0);
   useEffect(() => {
     if (!mapsReady) return;
 
@@ -499,10 +655,9 @@ export default function Game() {
       canvas.width = W; canvas.height = H;
 
       const P = player.current;
-      const overlayActive = overlayRef.current.active;
 
-      // physics (pause during overlay)
-      if (!overlayActive) {
+      // physics (player)
+      if (phase === "play") {
         const accel = P.speed;
         let targetVX = 0;
         if (keys.current.left) targetVX -= accel;
@@ -513,11 +668,47 @@ export default function Game() {
         const solved = rectVsWorld({ x: P.x, y: P.y, w: P.w, h: P.h, vx: P.vx, vy: P.vy * dt });
         P.x = solved.x; P.y = solved.y; P.vx = solved.vx; P.vy = solved.vy / dt; P.onGround = solved.onGround;
         if (P.onGround) P.vx *= friction;
-
-        // Record shadow trail
-        shadowTrailRef.current.push({ x: P.x, y: P.y, w: P.w, h: P.h });
-        if (shadowTrailRef.current.length > SHADOW_STEPS) shadowTrailRef.current.shift();
       }
+
+      // walkers AI
+      if (phase === "play") {
+        walkersRef.current.forEach((Wk) => {
+          // Edge & wall detection
+          const aheadX = Wk.dir < 0 ? Wk.x - 2 : Wk.x + Wk.w + 2;
+          const topY = Wk.y + 2;
+          const bottomY = Wk.y + Wk.h - 2;
+
+          // Wall ahead?
+          if (isSolid(tileAt(aheadX, topY)) || isSolid(tileAt(aheadX, bottomY))) {
+            Wk.dir *= -1;
+          } else {
+            // Edge check at foot in front
+            const footX = Wk.dir < 0 ? Wk.x - 1 : Wk.x + Wk.w + 1;
+            const footY = Wk.y + Wk.h + 1;
+            if (!isSolid(tileAt(footX, footY))) {
+              Wk.dir *= -1;
+            } else {
+              Wk.x += Wk.dir * Wk.speed * dt;
+            }
+          }
+        });
+      }
+
+      // Record shadow trail
+      shadowTrailRef.current.push({ x: P.x, y: P.y, w: P.w, h: P.h });
+      if (shadowTrailRef.current.length > SHADOW_STEPS) shadowTrailRef.current.shift();
+
+      // shake
+      let shakeX = 0, shakeY = 0;
+      if (shakeMsRef.current > 0) {
+        shakeMsRef.current -= dt * 1000;
+        const m = Math.max(0, shakeMsRef.current) / 1000;
+        const amp = Math.min(1, m) * 8;
+        shakeX = (Math.random() * 2 - 1) * amp;
+        shakeY = (Math.random() * 2 - 1) * amp;
+      }
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
 
       // bg + grid
       ctx.fillStyle = theme.bg; ctx.fillRect(0, 0, W, H);
@@ -525,125 +716,92 @@ export default function Game() {
       for (let c = 0; c <= COLS(); c++) { ctx.beginPath(); ctx.moveTo(c*TILE+0.5,0); ctx.lineTo(c*TILE+0.5,H); ctx.stroke(); }
       for (let r = 0; r <= ROWS(); r++) { ctx.beginPath(); ctx.moveTo(0,r*TILE+0.5); ctx.lineTo(W,r*TILE+0.5); ctx.stroke(); }
 
-      // tiles & collisions
+      // tiles & interactions
       let died = false;
       let reachedGoal = false;
+
       for (let r = 0; r < ROWS(); r++) {
         for (let c = 0; c < COLS(); c++) {
           const val = levelRef.current[r][c];
-          if (val == 0) continue;
+          if (val === 0) continue;
           const x = c * TILE, y = r * TILE;
 
-          if (val == 1) {
-            // Base solid block
+          if (val === 1) {
             ctx.fillStyle = theme.tileSolid;
             ctx.fillRect(x, y, TILE, TILE);
-
-            // Optional overlay tile texture (per-level)
             const tex = currentTileImgRef.current;
             if (tex) {
-              // draw texture on top, scaled to tile
-              ctx.globalAlpha = 0.95;
+              ctx.globalAlpha = 0.96;
               ctx.drawImage(tex, x, y, TILE, TILE);
               ctx.globalAlpha = 1;
             }
-          } else if (val == 2) {
-            // Enemy star
+          } else if (val === 2) {
             drawEnemyStar(ctx, x, y, TILE, t);
-            if (!overlayActive && overlaps(P.x, P.y, P.w, P.h, x, y, TILE, TILE)) died = true;
-          } else if (val == 3) {
-            // Fancy goal + label
+            if (phase === "play" && overlaps(P.x, P.y, P.w, P.h, x, y, TILE, TILE)) died = true;
+          } else if (val === 3) {
             drawFancyGoal(ctx, x, y, TILE, t);
-            if (!overlayActive && overlaps(P.x, P.y, P.w, P.h, x, y, TILE, TILE)) reachedGoal = true;
+            if (phase === "play" && overlaps(P.x, P.y, P.w, P.h, x, y, TILE, TILE)) reachedGoal = true;
+          } else if (val === 4) {
+            // Invisible enemy
+            if (phase === "play" && overlaps(P.x, P.y, P.w, P.h, x, y, TILE, TILE)) died = true;
+          } else if (val === 5) {
+            // Ghost platform
+            drawDottedBlock(ctx, x, y, TILE, t, rgbaFromHex(theme.text, 0.9));
+          } else if (val === 6) {
+            // Invisible goal
+            if (phase === "play" && overlaps(P.x, P.y, P.w, P.h, x, y, TILE, TILE)) reachedGoal = true;
           }
         }
       }
 
-      // death or goal handling
-      if (!overlayActive) {
-        if (died) {
-          // SHAKE + over SFX, then reset
-          if (!deathTimerRef.current) {
-            startShake(380, 13);
-            const o = overSfxRef.current;
-            if (o) { try { o.currentTime = 0; o.volume = 0.9; o.play(); } catch {} }
-            deathTimerRef.current = setTimeout(() => {
-              deathTimerRef.current = null;
-              resetPlayer();
-              clearInputsAndFocus();
-            }, 420);
-          }
-        } else if (reachedGoal) {
-          // Determine if last level
-          const next = currentLevel + 1;
-          const isFinal = next >= levelsRef.current.length;
+      // draw walkers & collide with player
+      walkersRef.current.forEach((Wk) => {
+        // draw
+        ctx.save();
+        const radius = Math.max(3, TILE * 0.08);
+        ctx.fillStyle = "#C53939";
+        roundRect(ctx, Wk.x, Wk.y, Wk.w, Wk.h, radius);
+        ctx.fill();
+        ctx.lineWidth = Math.max(1, TILE * 0.04);
+        ctx.strokeStyle = "rgba(0,0,0,0.25)";
+        ctx.stroke();
+        // highlight
+        ctx.fillStyle = "rgba(255,255,255,0.18)";
+        roundRect(ctx, Wk.x + 2, Wk.y + 2, Wk.w - 4, Math.max(2, Wk.h * 0.2), radius * 0.6);
+        ctx.fill();
+        ctx.restore();
 
-          // play passed sfx
-          const p = passedSfxRef.current;
-          if (p) { try { p.currentTime = 0; p.volume = 0.8; p.play(); } catch {} }
-
-          if (isFinal) {
-            overlayRef.current.active = true;
-            overlayRef.current.kind = "gameWin";
-            setOverlay({ kind: "gameWin" });
-            clearInputsAndFocus();
-          } else {
-            overlayRef.current.active = true;
-            overlayRef.current.kind = "levelComplete";
-            setOverlay({ kind: "levelComplete" });
-            clearInputsAndFocus();
-            // Auto-advance after 2s
-            nextLevelTimerRef.current = setTimeout(() => {
-              overlayRef.current.active = false;
-              overlayRef.current.kind = null;
-              setOverlay(null);
-              advanceLevel();
-              clearInputsAndFocus();
-            }, 2000);
-          }
+        // collide
+        if (phase === "play" && overlaps(P.x, P.y, P.w, P.h, Wk.x, Wk.y, Wk.w, Wk.h)) {
+          died = true;
         }
+      });
 
-        // coins (animated) + score SFX trigger
-        const coinSize = TILE * 0.4;
-        const frameCount = coinFrames.length || 1;
-        if (coinReady && frameCount > 0) coinTime += dt;
-        const frameIdx = coinReady ? Math.floor(coinTime * COIN_FPS) % frameCount : 0;
+      // coins
+      const coinSize = TILE * 0.4;
+      const frameCount = coinFrames.length || 1;
+      if (coinReady && frameCount > 0) coinTime += dt;
+      const frameIdx = coinReady ? Math.floor(coinTime * COIN_FPS) % frameCount : 0;
 
-        coinsRef.current.forEach((coin) => {
-          if (coin.taken) return;
-          const cx = coin.c * TILE + TILE * 0.5 - coinSize / 2;
-          const cy = coin.r * TILE + TILE * 0.5 - coinSize / 2;
-          if (overlaps(P.x, P.y, P.w, P.h, cx, cy, coinSize, coinSize)) {
-            coin.taken = true;
-            setScore((s) => s + 1);
-            playScoreSfx();
-          }
-          if (!coin.taken) {
-            if (coinReady) ctx.drawImage(coinFrames[frameIdx], cx, cy, coinSize, coinSize);
-            else {
-              ctx.beginPath(); ctx.fillStyle = theme.coin;
-              ctx.arc(cx + coinSize/2, cy + coinSize/2, coinSize/2, 0, Math.PI*2); ctx.fill();
-            }
-          }
-        });
-      } else {
-        // Overlay active: freeze visuals for coins
-        const coinSize = TILE * 0.4;
-        const frameCount = coinFrames.length || 1;
-        const frameIdx = coinReady && frameCount ? Math.floor(coinTime * COIN_FPS) % frameCount : 0;
-        coinsRef.current.forEach((coin) => {
-          if (coin.taken) return;
-          const cx = coin.c * TILE + TILE * 0.5 - coinSize / 2;
-          const cy = coin.r * TILE + TILE * 0.5 - coinSize / 2;
+      coinsRef.current.forEach((coin) => {
+        if (coin.taken) return;
+        const cx = coin.c * TILE + TILE * 0.5 - coinSize / 2;
+        const cy = coin.r * TILE + TILE * 0.5 - coinSize / 2;
+        if (phase === "play" && overlaps(P.x, P.y, P.w, P.h, cx, cy, coinSize, coinSize)) {
+          coin.taken = true;
+          setScore((s) => s + 1);
+          playScoreSfx();
+        }
+        if (!coin.taken) {
           if (coinReady) ctx.drawImage(coinFrames[frameIdx], cx, cy, coinSize, coinSize);
           else {
             ctx.beginPath(); ctx.fillStyle = theme.coin;
             ctx.arc(cx + coinSize/2, cy + coinSize/2, coinSize/2, 0, Math.PI*2); ctx.fill();
           }
-        });
-      }
+        }
+      });
 
-      // Draw delay shadow ghosts
+      // delay shadow ghosts
       ctx.save();
       ctx.filter = "blur(1.2px)";
       for (let i = 0; i < shadowTrailRef.current.length; i++) {
@@ -651,8 +809,7 @@ export default function Game() {
         const k = (i + 1) / SHADOW_STEPS;
         const a = SHADOW_ALPHA * k;
         const shrink = 1 - k * 0.12;
-        const ox = (1 - k) * 6;
-        const oy = (1 - k) * 4;
+        const ox = (1 - k) * 6, oy = (1 - k) * 4;
 
         const w = s.w * shrink;
         const h = s.h * shrink;
@@ -660,26 +817,42 @@ export default function Game() {
         const y = s.y + (s.h - h) * 0.5 - oy;
 
         ctx.globalAlpha = a;
-        ctx.fillStyle = "#2D2C28";
+        ctx.fillStyle = "#000000";
         ctx.fillRect(x, y, w, h);
       }
       ctx.restore();
       ctx.globalAlpha = 1;
       ctx.filter = "none";
 
-      // player (on top)
-      ctx.fillStyle = player.current.color;
+      // player on top
+      ctx.fillStyle = theme.player;
       ctx.fillRect(P.x, P.y, P.w, P.h);
 
-      // Screen shake transform on wrapper
-      if (shakeRef.current.t > 0 && gameWrapRef.current) {
-        shakeRef.current.t -= dt * 1000;
-        const k = Math.max(shakeRef.current.t, 0) / shakeRef.current.dur; // 1..0
-        const m = shakeRef.current.mag * (0.2 + 0.8 * k);
-        const rx = (Math.random() * 2 - 1) * m;
-        const ry = (Math.random() * 2 - 1) * m;
-        gameWrapRef.current.style.transform = `translate(${rx}px, ${ry}px)`;
-        if (shakeRef.current.t <= 0) gameWrapRef.current.style.transform = "translate(0,0)";
+      ctx.restore(); // end shake
+
+      // outcomes
+      if (phase === "play") {
+        if (died) {
+          shakeMsRef.current = 450;
+          try { const a = hitSfxRef.current; a && (a.currentTime = 0, a.volume = 0.8, a.play()); } catch {}
+          setTimeout(() => {
+            resetPlayer();
+            clearInputsAndFocus();
+          }, 300);
+        } else if (reachedGoal) {
+          setPhase("passed");
+          clearInputsAndFocus();
+          try { const a = passSfxRef.current; a && (a.currentTime = 0, a.volume = 0.9, a.play()); } catch {}
+          clearTimeout(passTimerRef.current);
+          passTimerRef.current = setTimeout(() => {
+            const next = currentLevel + 1;
+            if (next < levelsRef.current.length) {
+              loadLevelIndex(next);
+            } else {
+              setPhase("won");
+            }
+          }, 2000);
+        }
       }
 
       if (running) rafRef.current = requestAnimationFrame(loop);
@@ -688,27 +861,26 @@ export default function Game() {
     rafRef.current = requestAnimationFrame(loop);
 
     const down = (e) => {
-      // ignore keydowns during overlay (but allow Escape to pause)
-      if (overlayRef.current.active && e.key !== "Escape") return;
-
+      if (phase !== "play") {
+        if (e.key === "r" || e.key === "R") resetPlayer();
+        return;
+      }
       if (["ArrowLeft","a","A"].includes(e.key)) keys.current.left = true;
       if (["ArrowRight","d","D"].includes(e.key)) keys.current.right = true;
       if (["w","W","ArrowUp"].includes(e.key) || e.code === "Space") keys.current.up = true;
 
-      // Jump with SFX (onGround only)
       if ((["Space","w","W","ArrowUp"].includes(e.key) || e.code === "Space") && player.current.onGround) {
         player.current.vy = -player.current.jump;
         player.current.onGround = false;
         const a = jumpSfxRef.current;
-        if (a) { try { a.currentTime = 0; a.volume = 0.55; a.play(); } catch {} }
+        if (a) { try { a.currentTime = 0; a.volume = 0.6; a.play(); } catch {} }
       }
 
-      if (e.key === "r" || e.key === "R") { resetPlayer(); clearInputsAndFocus(); }
+      if (e.key === "r" || e.key === "R") resetPlayer();
       if (e.key === "Escape") setRunning((r) => !r);
     };
 
     const up = (e) => {
-      // DO NOT block keyups during overlay; this fixes "stuck keys"
       if (["ArrowLeft","a","A"].includes(e.key)) keys.current.left = false;
       if (["ArrowRight","d","D"].includes(e.key)) keys.current.right = false;
       if (["w","W","ArrowUp"].includes(e.key) || e.code === "Space") keys.current.up = false;
@@ -721,46 +893,40 @@ export default function Game() {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [running, coinFrames, coinReady, mapsReady, levelTitle, currentLevel, theme]);
+  }, [running, coinFrames, coinReady, mapsReady, levelTitle, currentLevel, theme, phase]);
 
-  // ---- UI ----
+  /* ===================== UI ===================== */
   return (
-    <div style={{ height: "100vh", width: "100vw", overflow: "hidden", color: theme.text }}>
-      {/* Preloaded SFX */}
-      <audio ref={jumpSfxRef}   src="/assets/sfx/jump.mp3"   preload="auto" />
-      <audio ref={passedSfxRef} src="/assets/sfx/passed.mp3" preload="auto" />
-      <audio ref={overSfxRef}   src="/assets/sfx/over.mp3"   preload="auto" />
+    <div style={{ height: "100vh", width: "100vw", overflow: "hidden", color: theme.text, background: theme.bg }}>
+      {/* SFX */}
+      <audio ref={jumpSfxRef}  src="/assets/sfx/jump.mp3"   preload="auto" />
+      <audio ref={hitSfxRef}   src="/assets/sfx/hit.mp3"    preload="auto" />
+      <audio ref={passSfxRef}  src="/assets/sfx/passed.mp3" preload="auto" />
 
       {/* Background dots */}
       <div
         style={{
-          width: "100%",
-          height: "100%",
-          position: "absolute",
-          top: 0,
-          left: 0,
-          zIndex: -1,
-          pointerEvents: "none",
-          background: theme.bg,
+          width: "100%", height: "100%", position: "absolute", top: 0, left: 0,
+          zIndex: -1, pointerEvents: "none", background: theme.bg
         }}
       >
         <DotGrid
           dotSize={10}
           gap={15}
-          baseColor="#EADFC6"
-          activeColor="#151411"
+          baseColor={theme.dotBase}
+          activeColor={theme.dotActive}
           proximity={120}
-          shockRadius={220}
-          shockStrength={4.2}
-          resistance={800}
-          returnDuration={1.6}
+          shockRadius={240}
+          shockStrength={4.5}
+          resistance={820}
+          returnDuration={1.5}
         />
       </div>
 
       {/* Top-right controls */}
       <div style={{ position: "fixed", top: 12, right: 12, display: "flex", gap: 8, zIndex: 10 }}>
         <button
-          onClick={(e) => { navigate('/'); e.currentTarget.blur(); }}
+          onClick={() => navigate('/')}
           style={{
             padding: "10px 14px",
             borderRadius: 12,
@@ -772,10 +938,10 @@ export default function Game() {
             boxShadow: theme.btnShadow,
           }}
         >
-          Back
+          Home
         </button>
         <button
-          onClick={(e) => { resetPlayer(); e.currentTarget.blur(); }}
+          onClick={() => { resetPlayer(); clearInputsAndFocus(); }}
           style={{
             padding: "10px 14px",
             borderRadius: 12,
@@ -791,7 +957,7 @@ export default function Game() {
         </button>
       </div>
 
-      {/* LEFT FIXED HUD */}
+      {/* LEFT HUD */}
       <div
         style={{
           position: "fixed",
@@ -812,7 +978,7 @@ export default function Game() {
             background: theme.cardBg,
             color: theme.text,
             boxShadow: theme.cardShadow,
-            minWidth: 140,
+            minWidth: 160,
             fontWeight: 700,
           }}
         >
@@ -826,7 +992,7 @@ export default function Game() {
             background: theme.cardBg,
             color: theme.text,
             boxShadow: theme.cardShadow,
-            minWidth: 140,
+            minWidth: 160,
             fontWeight: 700,
           }}
         >
@@ -834,23 +1000,21 @@ export default function Game() {
         </div>
       </div>
 
-      {/* Game canvas (+ shake wrapper) */}
+      {/* Game canvas */}
       <div style={{ marginTop:"15px", height: "100%", display: "grid", placeItems: "center", zIndex: 1 }}>
         {mapsReady ? (
-          <div ref={gameWrapRef} style={{ willChange: "transform" }}>
-            <canvas
-              ref={canvasRef}
-              style={{
-                width: canvasSize.w,
-                height: canvasSize.h,
-                maxWidth: "100%",
-                maxHeight: "100%",
-                borderRadius: 16,
-                boxShadow: "0 18px 42px rgba(0,0,0,0.18)",
-                background: theme.bg,
-              }}
-            />
-          </div>
+          <canvas
+            ref={canvasRef}
+            style={{
+              width: canvasSize.w,
+              height: canvasSize.h,
+              maxWidth: "100%",
+              maxHeight: "100%",
+              borderRadius: 16,
+              boxShadow: "0 18px 42px rgba(0,0,0,0.18)",
+              background: theme.bg,
+            }}
+          />
         ) : (
           <div style={{ fontFamily: "system-ui", color: theme.text, opacity: 0.7 }}>
             Loading level…
@@ -859,62 +1023,57 @@ export default function Game() {
       </div>
 
       {/* Overlays */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          display: "grid",
-          placeItems: "center",
-          background: overlay ? "rgba(0,0,0,0.25)" : "transparent",
-          backdropFilter: overlay ? "blur(2px)" : "none",
-          opacity: overlay ? 1 : 0,
-          transition: "opacity 220ms ease",
-          pointerEvents: overlay ? "auto" : "none",
-          zIndex: 20,
-        }}
-      >
-        {overlay?.kind === "levelComplete" && (
+      {phase === "passed" && (
+        <div
+          style={{
+            position: "fixed", inset: 0, display: "grid", placeItems: "center",
+            background: "rgba(0,0,0,0.35)", backdropFilter: "blur(2px)", zIndex: 20
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div
             style={{
-              padding: "22px 28px",
+              padding: "24px 28px",
               borderRadius: 16,
               background: theme.cardBg,
               color: theme.text,
               border: `1.5px solid ${theme.cardBorder}`,
               boxShadow: theme.cardShadow,
               fontFamily: "system-ui, Arial, sans-serif",
-              fontWeight: 800,
-              fontSize: 28,
               textAlign: "center",
+              minWidth: 260
             }}
           >
-            🎉 Congratulations!
-            <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.8, marginTop: 6 }}>
-              Next round starting…
-            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>🎉 Congratulations!</div>
+            <div style={{ opacity: 0.8 }}>Next round starts in a moment…</div>
           </div>
-        )}
+        </div>
+      )}
 
-        {overlay?.kind === "gameWin" && (
+      {phase === "won" && (
+        <div
+          style={{
+            position: "fixed", inset: 0, display: "grid", placeItems: "center",
+            background: "rgba(0,0,0,0.45)", backdropFilter: "blur(3px)", zIndex: 30
+          }}
+        >
           <div
             style={{
-              padding: "24px 30px",
+              padding: "28px 32px",
               borderRadius: 18,
               background: theme.cardBg,
               color: theme.text,
               border: `1.5px solid ${theme.cardBorder}`,
-              boxShadow: theme.cardShadow,
+              boxShadow: "0 24px 60px rgba(0,0,0,0.25)",
               fontFamily: "system-ui, Arial, sans-serif",
               textAlign: "center",
-              minWidth: 280,
+              minWidth: 320
             }}
           >
-            <div style={{ fontWeight: 900, fontSize: 30, marginBottom: 8 }}>🏆 Congratulations!</div>
-            <div style={{ fontWeight: 700, fontSize: 18, opacity: 0.9, marginBottom: 18 }}>
-              You have won the game.
-            </div>
+            <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 10 }}>🏆 You’ve won the game!</div>
+            <div style={{ opacity: 0.8, marginBottom: 16 }}>Great run!</div>
             <button
-              onClick={(e) => { navigate('/'); e.currentTarget.blur(); }}
+              onClick={() => navigate("/")}
               style={{
                 padding: "10px 16px",
                 borderRadius: 12,
@@ -922,16 +1081,16 @@ export default function Game() {
                 background: theme.btnBg,
                 color: theme.text,
                 cursor: "pointer",
-                fontSize: 16,
-                fontWeight: 700,
+                fontSize: 14,
                 boxShadow: theme.btnShadow,
+                fontWeight: 700
               }}
             >
               Home
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
