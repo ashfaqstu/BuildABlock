@@ -16,7 +16,7 @@ import Grid from "./storyblok/Grid";
 
 // Pages
 import Game from "./Game/Game";         // Storyblok 'game' component
-import Platformer from "./Game/Blok.jsx"; // Your actual playable page at /game
+
 
 // --- Storyblok init ---
 storyblokInit({
@@ -33,7 +33,7 @@ storyblokInit({
     teaser: Teaser,
     feature: Feature,
     grid: Grid,
-    game: Platformer,
+    game: Game,
     home: Home,
   },
 });
@@ -42,7 +42,7 @@ storyblokInit({
 // /game -> Platformer
 // everything else -> App (your Storyblok-driven app)
 const router = createBrowserRouter([
-  { path: "/game", Component: Platformer },
+  { path: "/game", Component: Game },
   { path: "/*", Component: App },
 ]);
 
