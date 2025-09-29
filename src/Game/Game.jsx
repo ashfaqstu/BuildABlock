@@ -642,7 +642,24 @@ export default function Game() {
     const { cleaned, walkers } = buildWalkersAndCleanMap(L.map);
 
     levelRef.current = cleaned;
-    coinMapRef.current = L.coin;
+    
+    const rows = cleaned.length;
+    const cols = cleaned[0]?.length || 0;
+
+    const normalizeCoinMap = (raw, targetRows, targetCols) => {
+      if (!targetRows || !targetCols) return [];
+      const out = Array.from({ length: targetRows }, (_, r) => {
+        const sourceRow = raw?.[r] || [];
+        return Array.from({ length: targetCols }, (_, c) => {
+          const val = sourceRow?.[c];
+          const n = typeof val === "number" ? val : parseInt(val, 10);
+          return Number.isFinite(n) && n > 0 ? 1 : 0;
+        });
+      });
+      return out;
+    };
+
+    coinMapRef.current = normalizeCoinMap(L.coin, rows, cols);
     currentTileImgRef.current = L.tileImg || null;
     walkersRef.current = walkers;
 
@@ -654,7 +671,19 @@ export default function Game() {
     setLevelTitle(L.title || `Level ${idx + 1}`);
     rebuildCoinsFromMap();
 
-    spawnRef.current = L.spawn || { r: 6, c: 1 };
+    const clampSpawn = (spawn, maxRows, maxCols) => {
+      const fallbackR = Math.max(0, (maxRows || 1) - 1);
+      const fallback = { r: fallbackR, c: 0 };
+      const src = spawn && Number.isFinite(spawn.r) && Number.isFinite(spawn.c) ? spawn : fallback;
+      const clamp = (v, limit) => {
+        if (!Number.isFinite(v)) return 0;
+        if (!Number.isFinite(limit) || limit <= 0) return 0;
+        return Math.min(limit - 1, Math.max(0, v));
+      };
+      return { r: clamp(src.r, maxRows || 1), c: clamp(src.c, maxCols || 1) };
+    };
+
+    spawnRef.current = clampSpawn(L.spawn, rows, cols);
 
     const TILE = tileRef.current;
     const size = TILE * 0.6;
@@ -922,12 +951,7 @@ export default function Game() {
           try { const a = passSfxRef.current; a && (a.currentTime = 0, a.volume = 0.9, a.play()); } catch {}
           clearTimeout(passTimerRef.current);
           passTimerRef.current = setTimeout(() => {
-            const next = currentLevel + 1;
-            if (next < levelsRef.current.length) {
-              loadLevelIndex(next);
-            } else {
-              setPhase("won");
-            }
+            advanceLevel();
           }, 2000);
         }
       }
@@ -974,7 +998,7 @@ export default function Game() {
 
   /* ===================== UI ===================== */
   return (
-    <div style={{ height: "100vh", width: "100vw", overflow: "hidden", color: theme.text, background: theme.bg }}>
+    <div style={{ height: "100vh", width: "100vw", overflow: "hidden", color: theme.text, background: theme.bg, position: "relative" }}>
       {/* SFX */}
       <audio ref={jumpSfxRef}  src="/assets/sfx/jump.mp3"   preload="auto" />
       <audio ref={hitSfxRef}   src="/assets/sfx/over.mp3"    preload="auto" />
@@ -984,7 +1008,7 @@ export default function Game() {
       <div
         style={{
           width: "100%", height: "100%", position: "absolute", top: 0, left: 0,
-          zIndex: -1, pointerEvents: "none", background: theme.bg
+          zIndex: 0, pointerEvents: "none", background: theme.bg
         }}
       >
         <DotGrid
@@ -1078,7 +1102,7 @@ export default function Game() {
       </div>
 
       {/* Game canvas */}
-      <div style={{ marginTop:"15px", height: "100%", display: "grid", placeItems: "center", zIndex: 1 }}>
+       <div style={{ marginTop:"15px", height: "100%", display: "grid", placeItems: "center", position: "relative", zIndex: 1 }}>
         {mapsReady ? (
           <div
             style={{
@@ -1100,6 +1124,8 @@ export default function Game() {
                 height: "100%",
                 display: "block",
                 background: theme.bg,
+                position: "relative",
+                zIndex: 1,
               }}
             />
             {overlaySrc && (
@@ -1115,6 +1141,7 @@ export default function Game() {
                   objectFit: "fill",
                   pointerEvents: "none",
                   imageRendering: "pixelated",
+                  zIndex: 0,
                 }}
               />
             )}
