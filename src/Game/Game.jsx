@@ -96,6 +96,48 @@ function shade(hex, dL = 0, dS = 0) {
   l = clamp01(l + dL);
   return hslToHex(h, s, l);
 }
+function dotPaletteFromPrimary(primaryHex, bgHex) {
+  const primary = normalizeHex(primaryHex);
+  const bg = normalizeHex(bgHex);
+  if (!primary || !bg) {
+    return { base: "#2B2A26", active: "#F1C65C" };
+  }
+
+  const { r, g, b } = hexToRgb(primary);
+  const { h, s } = rgbToHsl(r, g, b);
+  const bgLum = relativeLuminance(bg);
+
+  const baseSat = clamp01(0.25 + s * 0.55);
+  const activeSat = clamp01(0.35 + s * 0.6);
+
+  let baseLight;
+  let activeLight;
+  if (bgLum >= 0.75) {
+    baseLight = 0.48;     // was 0.28
+    activeLight = 0.56;   // was 0.46
+  } else if (bgLum >= 0.6) {
+    baseLight = 0.54;     // was 0.34
+    activeLight = 0.64;   // was 0.54
+  } else if (bgLum >= 0.45) {
+    baseLight = 0.62;     // was 0.42
+    activeLight = 0.72;   // was 0.62
+  } else if (bgLum >= 0.3) {
+    baseLight = 0.78;     // was 0.58
+    activeLight = 0.88;   // was 0.78
+  } else {
+    baseLight = 0.88;     // was 0.68
+    activeLight = 0.96;   // was 0.88
+  }
+
+  baseLight = clamp01(baseLight);
+  activeLight = clamp01(Math.max(activeLight, baseLight + 0.12));
+
+  return {
+    base: hslToHex(h, baseSat, baseLight),
+    active: hslToHex(h, activeSat, Math.min(0.96, activeLight)),
+  };
+}
+
 
 function deriveThemeFromPrimary(primaryHex) {
   const fallback = DEFAULT_PRIMARY;
@@ -108,8 +150,8 @@ function deriveThemeFromPrimary(primaryHex) {
   const text = "#161513";
   const tileSolid = "#2B2A26";
   const coin = "#F1C65C";
-  const dotBase = "#2B2A26";
-  const dotActive = "#F1C65C";
+  const { base: dotBase, active: dotActive } = dotPaletteFromPrimary(p, bg);
+
 
   return {
     primary: p,
