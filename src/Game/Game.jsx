@@ -672,22 +672,41 @@ export default function Game() {
     return { x, y, vx, vy, onGround };
   }
 
-  function resetPlayer() {
-    const TILE = tileRef.current;
-    const s = spawnRef.current || { r: 6, c: 1 };
-    const size = TILE * 0.6;
+  function resetPlayer(options = {}) {
+    const { themeOverride, keepScore = false } = options;
+
+    const rawTile = tileRef.current;
+    const TILE = Number.isFinite(rawTile) && rawTile > 0 ? rawTile : 64;
+    const spawnSource = spawnRef.current || { r: 6, c: 1 };
+    const spawn = {
+      r: Number.isFinite(spawnSource.r) ? spawnSource.r : 0,
+      c: Number.isFinite(spawnSource.c) ? spawnSource.c : 0,
+    };
+
+    const rawSize = TILE * 0.6;
+    const fallbackSize = Math.max(12, TILE * 0.5);
+    const size = Number.isFinite(rawSize) && rawSize > 0 ? rawSize : fallbackSize;
+
+    const px = spawn.c * TILE + TILE * 0.1;
+    const py = spawn.r * TILE;
     Object.assign(player.current, {
-      x: s.c * TILE + TILE * 0.1,
-      y: s.r * TILE,
+      x: Number.isFinite(px) ? px : 0,
+      y: Number.isFinite(py) ? py : 0,
       w: Number.isFinite(size) && size > 0 ? size : player.current.w,
       h: Number.isFinite(size) && size > 0 ? size : player.current.h,
       vx: 0,
       vy: 0,
-      onGround: false
+      onGround: false,
+      speed: Number.isFinite(player.current.speed) && player.current.speed > 0 ? player.current.speed : 280,
+      jump: Number.isFinite(player.current.jump) && player.current.jump > 0 ? player.current.jump : 800,
     });
+    
+    const playerColor = themeOverride?.player || theme.player || DEFAULT_THEME.player;
+    player.current.color = playerColor;
+
     rebuildCoinsFromMap();
     shadowTrailRef.current = [];
-    setScore(0);
+     if (!keepScore) setScore(0);
   }
 
   const overlaps = (ax, ay, aw, ah, bx, by, bw, bh) =>
@@ -729,7 +748,6 @@ export default function Game() {
     setTheme(nextTheme);
     setOverlaySrc(L.overlay || null);
     setLevelTitle(L.title || `Level ${idx + 1}`);
-    rebuildCoinsFromMap();
 
     const clampSpawn = (spawn, maxRows, maxCols) => {
       const fallbackR = Math.max(0, (maxRows || 1) - 1);
@@ -745,24 +763,12 @@ export default function Game() {
 
     spawnRef.current = clampSpawn(L.spawn, rows, cols);
 
-    const TILE = tileRef.current;
-    const size = TILE * 0.6;
-    Object.assign(player.current, {
-      x: spawnRef.current.c * TILE + TILE * 0.1,
-      y: spawnRef.current.r * TILE,
-      w: Number.isFinite(size) && size > 0 ? size : player.current.w,
-      h: Number.isFinite(size) && size > 0 ? size : player.current.h,
-      vx: 0,
-      vy: 0,
-      onGround: false,
-      color: nextTheme.player
-    });
+     resetPlayer({ themeOverride: nextTheme });
 
     setMapsReady(true);
     setCurrentLevel(idx);
     setPhase("play");
     recomputeSize();
-    shadowTrailRef.current = [];
     clearInputsAndFocus();
   }
 
