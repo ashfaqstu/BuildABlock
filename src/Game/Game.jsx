@@ -6,7 +6,7 @@ import DotGrid from "../components/DotGrid";
 
 /* ===================== Color Utilities ===================== */
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
-const DEFAULT_PRIMARY = "#fa9f42"; // orange
+const DEFAULT_PRIMARY = "#fa9f42"; 
 
 function normalizeHex(h) {
   if (!h) return null;
@@ -97,8 +97,7 @@ function shade(hex, dL = 0, dS = 0) {
   l = clamp01(l + dL);
   return hslToHex(h, s, l);
 }
-// helper for alpha output as CSS hsla()
-// helper for alpha output as CSS hsla()
+
 function hslToCss(h, s, l, a = 1) {
   const H = Math.round(h);
   const S = Math.round(s * 100);
@@ -109,22 +108,19 @@ function dotPaletteFromPrimary(primaryHex, bgHex) {
   const primary = normalizeHex(primaryHex);
   const bg = normalizeHex(bgHex);
   if (!primary || !bg) {
-    return { base: "#A8A8A8", active: "#7A7A7A" }; // safe fallback
+    return { base: "#A8A8A8", active: "#7A7A7A" }; 
   }
 
   const { r, g, b } = hexToRgb(primary);
   const { h, s } = rgbToHsl(r, g, b);
-  const bgLum = relativeLuminance(bg); // 0 (black) → 1 (white)
+  const bgLum = relativeLuminance(bg); 
 
-  // relative lightness for base = just a little darker than bg
-  // e.g. bgLum 0.9 → base 0.75
+  
   let baseLight = clamp01(bgLum - 0.001 );
 
-  // keep saturation soft so it blends
   const baseSat   = clamp01(0.15 + s * 0.30);
   const activeSat = clamp01(baseSat + 0.75);
 
-  // active = slightly darker than base, not black
   const DARKEN_STEP = 0.05;
   let activeLight = clamp01(Math.max(0.25, baseLight - DARKEN_STEP));
 
@@ -163,9 +159,9 @@ function deriveThemeFromPrimary(primaryHex) {
     btnBorder: "rgba(31, 30, 26, 0.32)",
     btnShadow: "0 5px 16px rgba(0,0,0,0.2)",
     tileSolid,
-    tileEnemy: "#E14848", // fixed
-    tileGoal:  "#58B883", // fixed
-    player:    "#2D2C28", // fixed
+    tileEnemy: "#E14848", 
+    tileGoal:  "#58B883", 
+    player:    "#2D2C28", 
     coin,
     dotBase,
     dotActive,
@@ -375,7 +371,6 @@ export default function Game() {
   const scoreRef = useRef(0);
   useEffect(() => { scoreRef.current = score; }, [score]);
 
-  // screen shake
   const shakeMsRef = useRef(0);
 
   // ----- Delay Shadow (ghost trail) -----
@@ -440,9 +435,7 @@ export default function Game() {
         x, y, w, h,
         dir: Math.random() < 0.5 ? -1 : 1,
         speed: 100,
-        // keep for reference if you want
         ox: x, oy: y,
-        // NEW: patrol bounds
         patrolMinX,
         patrolMaxX,
       });

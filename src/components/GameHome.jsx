@@ -122,7 +122,7 @@ export default function GameHome({
             {isMuted ? <IconMute /> : <IconVolume />}
             <span>{isMuted ? "Muted" : "Sound On"}</span>
           </button>
-          <span className="hint">[Space] Play • [M] Mute</span>
+          <span className="hint">[Space] Play • [M] Mute • [W][A][S][D] Move</span>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import Home from "./Game/Home";
-import Game from "./Game/Game"; // your platformer page
+import Game from "./Game/Game";
 
 export default function App() {
   return (

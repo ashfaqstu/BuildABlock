@@ -15,9 +15,9 @@ export default function Home() {
       />
     <GameHome
     to="/game" 
-      //onPlay={() => navigate("/game")}      // or any handler
-      audioSrc="/assets/sfx/bgm.mp3"                   // optional
-      logoSrc={logo}                         // put your provided logo in /public
+     
+      audioSrc="/assets/sfx/bgm.mp3"                  
+      logoSrc={logo}                         
     />
     </>
   );
