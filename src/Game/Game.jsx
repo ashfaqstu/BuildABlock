@@ -3,6 +3,7 @@ import { useStoryblokApi } from "@storyblok/react";
 import { useNavigate } from "react-router-dom";
 import DotGrid from "../components/DotGrid";
 
+
 /* ===================== Color Utilities ===================== */
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const DEFAULT_PRIMARY = "#fa9f42"; // orange
@@ -96,47 +97,44 @@ function shade(hex, dL = 0, dS = 0) {
   l = clamp01(l + dL);
   return hslToHex(h, s, l);
 }
+// helper for alpha output as CSS hsla()
+// helper for alpha output as CSS hsla()
+function hslToCss(h, s, l, a = 1) {
+  const H = Math.round(h);
+  const S = Math.round(s * 100);
+  const L = Math.round(l * 100);
+  return `hsla(${H} ${S}% ${L}% / ${a})`;
+}
 function dotPaletteFromPrimary(primaryHex, bgHex) {
   const primary = normalizeHex(primaryHex);
   const bg = normalizeHex(bgHex);
   if (!primary || !bg) {
-    return { base: "#2B2A26", active: "#F1C65C" };
+    return { base: "#A8A8A8", active: "#7A7A7A" }; // safe fallback
   }
 
   const { r, g, b } = hexToRgb(primary);
   const { h, s } = rgbToHsl(r, g, b);
-  const bgLum = relativeLuminance(bg);
+  const bgLum = relativeLuminance(bg); // 0 (black) → 1 (white)
 
-  const baseSat = clamp01(0.25 + s * 0.55);
-  const activeSat = clamp01(0.35 + s * 0.6);
+  // relative lightness for base = just a little darker than bg
+  // e.g. bgLum 0.9 → base 0.75
+  let baseLight = clamp01(bgLum - 0.001 );
 
-  let baseLight;
-  let activeLight;
-  if (bgLum >= 0.75) {
-    baseLight = 0.48;     // was 0.28
-    activeLight = 0.56;   // was 0.46
-  } else if (bgLum >= 0.6) {
-    baseLight = 0.54;     // was 0.34
-    activeLight = 0.64;   // was 0.54
-  } else if (bgLum >= 0.45) {
-    baseLight = 0.62;     // was 0.42
-    activeLight = 0.72;   // was 0.62
-  } else if (bgLum >= 0.3) {
-    baseLight = 0.78;     // was 0.58
-    activeLight = 0.88;   // was 0.78
-  } else {
-    baseLight = 0.88;     // was 0.68
-    activeLight = 0.96;   // was 0.88
-  }
+  // keep saturation soft so it blends
+  const baseSat   = clamp01(0.15 + s * 0.30);
+  const activeSat = clamp01(baseSat + 0.75);
 
-  baseLight = clamp01(baseLight);
-  activeLight = clamp01(Math.max(activeLight, baseLight + 0.12));
+  // active = slightly darker than base, not black
+  const DARKEN_STEP = 0.05;
+  let activeLight = clamp01(Math.max(0.25, baseLight - DARKEN_STEP));
 
   return {
     base: hslToHex(h, baseSat, baseLight),
-    active: hslToHex(h, activeSat, Math.min(0.96, activeLight)),
+    active: hslToHex(h, activeSat, activeLight),
   };
 }
+
+
 
 
 function deriveThemeFromPrimary(primaryHex) {

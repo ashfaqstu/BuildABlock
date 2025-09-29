@@ -13,6 +13,7 @@
 		"@react-three/drei": "^10.7.6",
 		"@react-three/fiber": "^9.3.0",
 		"@storyblok/react": "^5.0.0",
+		"framer-motion": "^12.23.22",
 		"gsap": "^3.13.0",
 		"react": "^19.1.0",
 		"react-dom": "^19.1.0",
