@@ -5,7 +5,7 @@ import DotGrid from "../components/DotGrid";
 
 /* ===================== Color Utilities ===================== */
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
-const DEFAULT_PRIMARY = "#7d3cff"
+const DEFAULT_PRIMARY = "#fa9f42"; // orange
 
 function normalizeHex(h) {
   if (!h) return null;
@@ -69,6 +69,26 @@ function hslToHex(h, s, l) {
   const { r, g, b } = hslToRgb(h, s, l);
   return rgbToHex(r, g, b);
 }
+function relativeLuminance(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const toLinear = (c) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  const R = toLinear(r);
+  const G = toLinear(g);
+  const B = toLinear(b);
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+}
+function gridColorFromBackground(bgHex) {
+  const lum = relativeLuminance(bgHex);
+  if (!Number.isFinite(lum)) return shade(bgHex, -0.1, 0);
+  if (lum >= 0.75) return shade(bgHex, -0.35, -0.05);
+  if (lum >= 0.6) return shade(bgHex, -0.28, -0.04);
+  if (lum >= 0.45) return shade(bgHex, -0.18, -0.03);
+  if (lum >= 0.3) return shade(bgHex, 0.12, -0.05);
+  return shade(bgHex, 0.2, -0.05);
+}
 function shade(hex, dL = 0, dS = 0) {
   const { r, g, b } = hexToRgb(hex);
   let { h, s, l } = rgbToHsl(r, g, b);
@@ -84,7 +104,7 @@ function deriveThemeFromPrimary(primaryHex) {
   const { h, s } = rgbToHsl(r, g, b);
 
   const bg = hslToHex(h, Math.max(0.40, Math.min(0.65, s * 0.9 + 0.2)), 0.82);
-  const grid = shade(bg, -0.10, 0);
+   const grid = gridColorFromBackground(bg);
   const text = "#161513";
   const tileSolid = "#2B2A26";
   const coin = "#F1C65C";
@@ -1102,7 +1122,7 @@ export default function Game() {
       </div>
 
       {/* Game canvas */}
-       <div style={{ marginTop:"15px", height: "100%", display: "grid", placeItems: "center", position: "relative", zIndex: 1 }}>
+       <div style={{ height: "100%", display: "grid", placeItems: "center", position: "relative", zIndex: 1 }}>
         {mapsReady ? (
           <div
             style={{
@@ -1141,7 +1161,7 @@ export default function Game() {
                   objectFit: "fill",
                   pointerEvents: "none",
                   imageRendering: "pixelated",
-                  zIndex: 0,
+                   zIndex: 2,
                 }}
               />
             )}
