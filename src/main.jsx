@@ -10,12 +10,12 @@ import { storyblokInit, apiPlugin } from "@storyblok/react";
 import Page from "./storyblok/Page";
 import Teaser from "./storyblok/Teaser";
 import Feature from "./storyblok/Feature";
-import Home from "./Game/Home"; // Storyblok 'home' component
+import Home from "./Game/Home"; 
 import Grid from "./storyblok/Grid";
 
 
-// Pages
-import Game from "./Game/Game";         // Storyblok 'game' component
+
+import Game from "./Game/Game";         
 
 
 // --- Storyblok init ---
@@ -39,8 +39,7 @@ storyblokInit({
 });
 
 // --- Router ---
-// /game -> Platformer
-// everything else -> App (your Storyblok-driven app)
+
 const router = createBrowserRouter([
   { path: "/game", Component: Game },
   { path: "/*", Component: App },

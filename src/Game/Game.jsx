@@ -189,6 +189,21 @@ function loadImage(url) {
   });
 }
 
+function isDrawableImage(source) {
+  if (!source || typeof source !== "object") return false;
+  const w = source.naturalWidth ?? source.width ?? 0;
+  const h = source.naturalHeight ?? source.height ?? 0;
+
+  const okInstance =
+    (typeof HTMLImageElement !== "undefined" && source instanceof HTMLImageElement) ||
+    (typeof HTMLCanvasElement !== "undefined" && source instanceof HTMLCanvasElement) ||
+    (typeof ImageBitmap !== "undefined" && source instanceof ImageBitmap) ||
+    (typeof OffscreenCanvas !== "undefined" && source instanceof OffscreenCanvas);
+
+  return okInstance && w > 0 && h > 0;
+}
+
+
 /* Rounded rect helper */
 function roundRect(ctx, x, y, w, h, r) {
   const rr = Math.min(r, w/2, h/2);
@@ -372,38 +387,70 @@ export default function Game() {
   const walkersRef = useRef([]); // {x,y,w,h,dir,speed,ox,oy}
 
   function buildWalkersAndCleanMap(rawMap) {
-    const TILE = tileRef.current;
-    const map = rawMap.map(row => row.slice());
-    const walkers = [];
+  const TILE = tileRef.current;
+  const map = rawMap.map(row => row.slice());
+  const walkers = [];
 
-    for (let r = 0; r < map.length; r++) {
-      for (let c = 0; c < map[r].length; c++) {
-        if (map[r][c] === 7) {
-          // turn this tile into empty
-          map[r][c] = 0;
+  const rows = map.length;
+  const cols = map[0]?.length || 0;
+  const isSolidAt = (r, c) => r >= 0 && r < rows && c >= 0 && c < cols && map[r][c] === 1;
 
-          const w = TILE * 0.7;
-          const h = TILE * 0.6;
-          const x = c * TILE + (TILE - w) / 2;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (map[r][c] !== 7) continue;
 
-          // Find the top of the nearest ground beneath
-          let rr = r;
-          while (rr + 1 < map.length && map[rr + 1][c] !== 1) rr++;
-          // If there is ground below, align on top, else just use current row bottom
-          const hasGround = rr + 1 < map.length && map[rr + 1][c] === 1;
-          const y = (hasGround ? (rr + 1) : (r + 1)) * TILE - h;
+      // remove marker
+      map[r][c] = 0;
 
-          walkers.push({
-            x, y, w, h,
-            dir: Math.random() < 0.5 ? -1 : 1,
-            speed: 100, // px/s
-            ox: x, oy: y
-          });
-        }
+      // find ground row directly below this column (scan downward)
+      let rr = r;
+      while (rr + 1 < rows && map[rr + 1][c] !== 1) rr++;
+      const groundRow = rr + 1;
+      if (!(groundRow < rows && map[groundRow][c] === 1)) {
+        // no ground found — skip creating a walker to avoid floating/stuck enemies
+        continue;
       }
+
+      // walker size and position (sit on top of ground)
+      const w = TILE * 0.7;
+      const h = TILE * 0.6;
+      const xCenter = c * TILE + TILE / 2;
+      const y = (groundRow) * TILE - h;
+
+      // scan horizontally on the ground row to find contiguous platform bounds
+      // A tile is part of the "platform" if ground is solid below and the space
+      // the walker occupies is not blocked by solids (we only care about ground here).
+      let leftC = c, rightC = c;
+
+      // go left until ground disappears
+      while (leftC - 1 >= 0 && isSolidAt(groundRow, leftC - 1)) leftC--;
+      // go right until ground disappears
+      while (rightC + 1 < cols && isSolidAt(groundRow, rightC + 1)) rightC++;
+
+      // convert tile bounds to pixel bounds for the walker's LEFT edge
+      // left edge can go as far as the left-most tile start; right edge
+      // should keep the walker fully on platform.
+      const patrolMinX = leftC * TILE;
+      const patrolMaxX = (rightC + 1) * TILE - w;
+
+      // initial x centered at the original column
+      const x = Math.min(Math.max(xCenter - w / 2, patrolMinX), patrolMaxX);
+
+      walkers.push({
+        x, y, w, h,
+        dir: Math.random() < 0.5 ? -1 : 1,
+        speed: 100,
+        // keep for reference if you want
+        ox: x, oy: y,
+        // NEW: patrol bounds
+        patrolMinX,
+        patrolMaxX,
+      });
     }
-    return { cleaned: map, walkers };
   }
+  return { cleaned: map, walkers };
+}
+
 
   // ---------- Fancy Draws ----------
   const drawEnemyStar = (ctx, x, y, TILE, t) => {
@@ -578,10 +625,16 @@ export default function Game() {
         });
         if (sorted.length) {
           const imgs = await Promise.all(sorted.map(url => loadImage(url)));
-          if (!cancelled) { setCoinFrames(imgs.filter(Boolean)); setCoinReady(true); }
+          const drawable = imgs.filter(isDrawableImage);
+          if (!cancelled) {
+            setCoinFrames(drawable);
+            setCoinReady(drawable.length > 0);
+          }
         } else if (!cancelled) {
-          setCoinFrames([]); setCoinReady(false);
+          setCoinFrames([]);
+          setCoinReady(false);
         }
+            
       } catch (e) {
         console.error("Storyblok load error:", e);
         levelsRef.current = [{
@@ -833,28 +886,24 @@ export default function Game() {
       }
 
       // walkers AI
-      if (phase === "play") {
-        walkersRef.current.forEach((Wk) => {
-          // Edge & wall detection
-          const aheadX = Wk.dir < 0 ? Wk.x - 2 : Wk.x + Wk.w + 2;
-          const topY = Wk.y + 2;
-          const bottomY = Wk.y + Wk.h - 2;
+      // walkers AI (patrol within precomputed bounds)
+        if (phase === "play") {
+          walkersRef.current.forEach((Wk) => {
+            Wk.x += Wk.dir * Wk.speed * dt;
 
-          // Wall ahead?
-          if (isSolid(tileAt(aheadX, topY)) || isSolid(tileAt(aheadX, bottomY))) {
-            Wk.dir *= -1;
-          } else {
-            // Edge check at foot in front
-            const footX = Wk.dir < 0 ? Wk.x - 1 : Wk.x + Wk.w + 1;
-            const footY = Wk.y + Wk.h + 1;
-            if (!isSolid(tileAt(footX, footY))) {
-              Wk.dir *= -1;
-            } else {
-              Wk.x += Wk.dir * Wk.speed * dt;
+            // hit left bound
+            if (Wk.x <= Wk.patrolMinX) {
+              Wk.x = Wk.patrolMinX;
+              Wk.dir = 1;
             }
-          }
-        });
-      }
+            // hit right bound
+            if (Wk.x >= Wk.patrolMaxX) {
+              Wk.x = Wk.patrolMaxX;
+              Wk.dir = -1;
+            }
+          });
+        }
+
 
       // Record shadow trail
       shadowTrailRef.current.push({ x: P.x, y: P.y, w: P.w, h: P.h });
@@ -892,11 +941,12 @@ export default function Game() {
             ctx.fillStyle = theme.tileSolid;
             ctx.fillRect(x, y, TILE, TILE);
             const tex = currentTileImgRef.current;
-            if (tex) {
+            if (isDrawableImage(tex)) {
               ctx.globalAlpha = 0.96;
               ctx.drawImage(tex, x, y, TILE, TILE);
               ctx.globalAlpha = 1;
             }
+
           } else if (val === 2) {
             drawEnemyStar(ctx, x, y, TILE, t);
             if (phase === "play" && overlaps(P.x, P.y, P.w, P.h, x, y, TILE, TILE)) died = true;
@@ -918,15 +968,19 @@ export default function Game() {
 
       // draw walkers & collide with player
       const enemySprite = enemySpriteRef.current;
-      const hasEnemySprite = enemySprite && enemySprite.width && enemySprite.height;
+      const spriteWidth = enemySprite?.naturalWidth || enemySprite?.width || 0;
+      const spriteHeight = enemySprite?.naturalHeight || enemySprite?.height || 0;
+      const canDrawEnemySprite = isDrawableImage(enemySprite) && spriteWidth > 0 && spriteHeight > 0;
       walkersRef.current.forEach((Wk) => {
-        if (hasEnemySprite) {
-          const scale = Math.min(Wk.w / enemySprite.width, Wk.h / enemySprite.height);
-          const drawW = enemySprite.width * scale;
-          const drawH = enemySprite.height * scale;
+        if (canDrawEnemySprite) {
+          const scale = Math.min(Wk.w / spriteWidth, Wk.h / spriteHeight) || 0;
+          const drawW = spriteWidth * scale;
+          const drawH = spriteHeight * scale;
           const drawX = Wk.x + (Wk.w - drawW) / 2;
           const drawY = Wk.y + (Wk.h - drawH) / 2;
-          ctx.drawImage(enemySprite, drawX, drawY, drawW, drawH);
+          if (drawW > 0 && drawH > 0) {
+            ctx.drawImage(enemySprite, drawX, drawY, drawW, drawH);
+          }
         } else {
           ctx.save();
           const radius = Math.max(3, TILE * 0.08);
@@ -965,12 +1019,18 @@ export default function Game() {
           playScoreSfx();
         }
         if (!coin.taken) {
-          if (coinReady) ctx.drawImage(coinFrames[frameIdx], cx, cy, coinSize, coinSize);
-          else {
-            ctx.beginPath(); ctx.fillStyle = theme.coin;
-            ctx.arc(cx + coinSize/2, cy + coinSize/2, coinSize/2, 0, Math.PI*2); ctx.fill();
+          const frame = coinReady ? coinFrames[frameIdx] : null;
+          if (isDrawableImage(frame)) {
+            ctx.drawImage(frame, cx, cy, coinSize, coinSize);
+          } else {
+            // Fallback coin if frame missing/invalid
+            ctx.beginPath();
+            ctx.fillStyle = theme.coin;
+            ctx.arc(cx + coinSize/2, cy + coinSize/2, coinSize/2, 0, Math.PI*2);
+            ctx.fill();
           }
         }
+
       });
 
       // delay shadow ghosts
