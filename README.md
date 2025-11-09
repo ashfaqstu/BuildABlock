@@ -1,3 +1,5 @@
+Youtube Walkthrough: https://www.youtube.com/watch?v=AJFRAlhfJvs
+
 ## Inspiration
 We wanted to **push** the boundaries of what Storyblok can do. Most people use it for websites, blogs, or content-driven apps , but we asked ourselves:
 
